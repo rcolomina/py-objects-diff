@@ -177,3 +177,42 @@ def test_actual_empty_string_is_not_wildcard(v):
     ok, reason = v.verify_object_match("", "something", ignore_empty_strings=True)
     assert not ok
     assert "Value mismatch" in reason
+
+
+# --- ignore_types (compare values only, down to the leaves) ---
+
+def test_ignore_types_off_by_default(v):
+    ok, reason = v.verify_object_match([1, 2], (1, 2))
+    assert not ok
+    assert "Type mismatch" in reason
+
+def test_ignore_types_list_vs_tuple(v):
+    assert v.verify_object_match([1, 2], (1, 2), ignore_types=True) == (True, "")
+
+def test_ignore_types_int_vs_float_leaf(v):
+    assert v.verify_object_match(1, 1.0, ignore_types=True) == (True, "")
+
+def test_ignore_types_nested_container_kinds(v):
+    actual   = {"nums": [1, 2, 3]}
+    expected = {"nums": (1, 2, 3)}
+    assert v.verify_object_match(actual, expected, ignore_types=True) == (True, "")
+
+def test_ignore_types_still_reports_value_mismatch(v):
+    # Types are ignored, but leaf *values* must still match.
+    ok, reason = v.verify_object_match([1, 2], (1, 99), ignore_types=True)
+    assert not ok
+    assert "[1] ->" in reason
+
+def test_ignore_types_incompatible_structure(v):
+    # A dict vs a list is a structure mismatch, not a match.
+    ok, reason = v.verify_object_match({"a": 1}, [1], ignore_types=True)
+    assert not ok
+    assert "Structure mismatch" in reason
+
+def test_ignore_types_with_ignore_empty_strings(v):
+    # The two flags compose: wildcard empties + type-agnostic comparison.
+    actual   = {"id": 5, "tags": ["a", "b"]}
+    expected = {"id": "", "tags": ("a", "b")}
+    assert v.verify_object_match(
+        actual, expected, ignore_empty_strings=True, ignore_types=True
+    ) == (True, "")
