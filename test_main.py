@@ -130,3 +130,50 @@ def test_dict_containing_list_containing_dict(v):
     ok, reason = v.verify_object_match(actual, expected)
     assert not ok
     assert ".items -> [1] -> .id ->" in reason
+
+
+# --- ignore_empty_strings wildcard ---
+
+def test_ignore_empty_strings_off_by_default(v):
+    # An empty string in expected is a normal value unless the flag is set.
+    ok, reason = v.verify_object_match("hello", "")
+    assert not ok
+    assert "Value mismatch" in reason
+
+def test_ignore_empty_strings_matches_any_string(v):
+    assert v.verify_object_match("hello", "", ignore_empty_strings=True) == (True, "")
+
+def test_ignore_empty_strings_matches_across_types(v):
+    # The wildcard is checked before the type comparison, so it spans types.
+    assert v.verify_object_match(42, "", ignore_empty_strings=True) == (True, "")
+    assert v.verify_object_match([1, 2], "", ignore_empty_strings=True) == (True, "")
+    assert v.verify_object_match(None, "", ignore_empty_strings=True) == (True, "")
+
+def test_ignore_empty_strings_in_dict_value(v):
+    actual   = {"name": "Alice", "id": 7}
+    expected = {"name": "",      "id": 7}
+    assert v.verify_object_match(actual, expected, ignore_empty_strings=True) == (True, "")
+
+def test_ignore_empty_strings_only_wildcards_empties(v):
+    # Non-empty expected strings must still match exactly.
+    actual   = {"name": "Alice", "city": "Paris"}
+    expected = {"name": "",      "city": "London"}
+    ok, reason = v.verify_object_match(actual, expected, ignore_empty_strings=True)
+    assert not ok
+    assert ".city ->" in reason
+
+def test_ignore_empty_strings_nested(v):
+    actual   = {"user": {"name": "Bob", "token": "abc123"}}
+    expected = {"user": {"name": "Bob", "token": ""}}
+    assert v.verify_object_match(actual, expected, ignore_empty_strings=True) == (True, "")
+
+def test_ignore_empty_strings_in_list(v):
+    assert v.verify_object_match(
+        ["a", "b", "c"], ["a", "", "c"], ignore_empty_strings=True
+    ) == (True, "")
+
+def test_actual_empty_string_is_not_wildcard(v):
+    # Only empties in the *expected* object are wildcards, not the actual one.
+    ok, reason = v.verify_object_match("", "something", ignore_empty_strings=True)
+    assert not ok
+    assert "Value mismatch" in reason
