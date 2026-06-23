@@ -8,16 +8,27 @@ A single utility function `verify_object_match` for deep comparison of Python ob
 
 ## Architecture
 
-The entire logic lives in `main.py`. The function is designed as a method (`self` parameter) to be embedded in a test base class. It recursively handles:
+The logic lives in `main.py`. `verify_object_match` stays a thin method (`self` parameter) so it can be embedded in a test base class; it builds a `MatchOptions` and delegates to the module-level recursive helper `_diffs`, which carries the path prefix and returns a list of difference descriptions (empty == match). The recursion handles:
 
-- **Dicts** — key presence + recursive value comparison
+- **Dicts** — size/key-presence check + recursive value comparison
 - **Lists/Tuples** — length check + index-by-index recursive comparison
 - **Sets** — direct equality
 - **Pydantic-style objects** — dispatches via `.dict` attribute to the dict branch
-- **Primitives** — direct `!=` comparison
+- **Primitives** — `!=` comparison (or `math.isclose` when a tolerance is set)
 
-## Known issues
+## Comparison options
 
-- Duplicate docstring at lines 2–15 (one should be removed)
-- `type(x).__name__` is missing the `__` in the type mismatch message (line 20): `type(actual_obj).name` should be `type(actual_obj).__name__`
-- The custom object branch (line 57) calls `.dict` as a property but doesn't call it — works for Pydantic v1 (`.dict` is a method there, not a property), so callers must pass `.dict()` results or the branch silently recurses incorrectly with Pydantic v2
+Tuned via keyword flags on `verify_object_match` (or a pre-built `options=MatchOptions(...)`):
+
+- `ignore_empty_strings` — an empty string in the expected object is a wildcard matching any actual value
+- `ignore_types` — skip the exact-type check so only leaf values are compared (list vs tuple, int vs float)
+- `ignore_extra_keys` — actual dicts may carry keys absent from expected (subset matching)
+- `ignore_keys` — set of key names skipped at any depth (e.g. `id`, `created_at`)
+- `rel_tol` / `abs_tol` — approximate numeric leaf comparison via `math.isclose`
+- `collect_all` — report every difference; the second tuple element becomes a `list` of strings instead of one string
+
+Flags and `options=` are mutually exclusive (passing both raises `TypeError`).
+
+## Notes
+
+- The custom-object branch reads `.dict` as an attribute (no call). This suits objects that store a dict attribute and Pydantic v1 callers passing `.dict()` results; a raw Pydantic v2 model whose `.dict` is a bound method would not compare meaningfully.
